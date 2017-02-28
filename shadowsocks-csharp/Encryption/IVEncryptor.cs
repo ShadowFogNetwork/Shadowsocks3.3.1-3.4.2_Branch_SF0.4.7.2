@@ -1,8 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.Concurrent;
-using System.Linq;
-using System.Security.Cryptography;
 using System.Text;
 using System.Net;
 
@@ -25,9 +23,9 @@ namespace Shadowsocks.Encryption
         protected bool _encryptIVSent;
         protected string _method;
         protected int _cipher;
-        // cipher name in MbedTLS, useless when using LibSodium
-        protected string _cipherMbedName;
-        protected EncryptorInfo _cipherInfo;
+        // internal name in the crypto library
+        protected string _innerLibName;
+        protected EncryptorInfo CipherInfo;
         protected byte[] _key;
         protected int keyLen;
         protected int ivLen;
@@ -46,15 +44,15 @@ namespace Shadowsocks.Encryption
             _method = method;
             string k = method + ":" + password;
             ciphers = getCiphers();
-            _cipherInfo = ciphers[_method];
-            _cipherMbedName = _cipherInfo.name;
-            _cipher = _cipherInfo.type;
+            CipherInfo = ciphers[_method];
+            _innerLibName = CipherInfo.InnerLibName;
+            _cipher = CipherInfo.Type;
             if (_cipher == 0)
             {
                 throw new Exception("method not found");
             }
-            keyLen = _cipherInfo.key_size;
-            ivLen = _cipherInfo.iv_size;
+            keyLen = CipherInfo.KeySize;
+            ivLen = CipherInfo.IvSize;
             _key = CachedKeys.GetOrAdd(k, (nk) =>
             {
                 byte[] passbuf = Encoding.UTF8.GetBytes(password);
@@ -108,7 +106,7 @@ namespace Shadowsocks.Encryption
         #region OneTimeAuth
 
         public const int ONETIMEAUTH_FLAG = 0x10;
-        public const int ADDRTYPE_MASK = 0xF;
+        public const int ADDRTYPE_MASK = 0xEF;
 
         public const int ONETIMEAUTH_BYTES = 10;
 
@@ -237,10 +235,7 @@ namespace Shadowsocks.Encryption
 
         protected static void randBytes(byte[] buf, int length)
         {
-            byte[] temp = new byte[length];
-            RNGCryptoServiceProvider rngServiceProvider = new RNGCryptoServiceProvider();
-            rngServiceProvider.GetBytes(temp);
-            temp.CopyTo(buf, 0);
+            RNG.GetBytes(buf, length);
         }
 
         public override void Encrypt(byte[] buf, int length, byte[] outbuf, out int outlength)
